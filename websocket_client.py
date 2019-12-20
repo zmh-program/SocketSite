@@ -1,14 +1,13 @@
-import time
 from typing import *
 import websockets
 import asyncio
 
 
 class AsyncClient(object):
-    def __init__(self, addr):
+    def __init__(self, addr, loop=None):
         self.host, self.port = addr
         self.addr = addr
-        self.loop = asyncio.new_event_loop()
+        self.loop = loop or asyncio.new_event_loop()
         self.websocket = None
 
     async def _listen(self):
@@ -17,7 +16,7 @@ class AsyncClient(object):
                 await self.receiveEvent(message)
 
     def listen(self):
-        return self.loop.run_until_complete(self._listen())
+        return asyncio.run_coroutine_threadsafe(self._listen(), self.loop)
 
     @property
     def url(self) -> str:
@@ -33,3 +32,4 @@ class AsyncClient(object):
 if __name__ == "__main__":
     _client = AsyncClient(("127.0.0.1", 8000))
     _client.listen()
+    _client.loop.run_forever()

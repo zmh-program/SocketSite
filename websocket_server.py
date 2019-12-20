@@ -1,4 +1,5 @@
 import asyncio
+import pickle
 from typing import *
 import websockets
 from websockets.legacy import server
@@ -16,22 +17,30 @@ class AsyncServerClient(object):
             await self.parent.receive_from_websocket(self, message)
         self.is_alive = False
 
+    @staticmethod
+    def recv_pickle(_pickle):
+        return pickle.loads(_pickle)
+
     async def send(self, message) -> bool:
         if self.is_alive:
             await self.websocket.send(message)
             return True
         return False
 
+    async def send_pickle(self, obj):
+        return await self.send(pickle.dumps(obj))
+
 
 class AsyncServer(object):
     client_type = AsyncServerClient
 
-    def __init__(self, addr: Tuple[str, int]):
+    def __init__(self, addr: Tuple[str, int], allow_hosts=None):
         self.addr = addr
         self.host, self.port = addr
         self.loop = asyncio.new_event_loop()
         self.clients: List[AsyncServerClient] = []
         self.is_alive = False
+        self.allow_hosts = set(allow_hosts or [self.host, "localhost", "127.0.0.1"])
 
     @property
     def alive_socket(self) -> Iterable[AsyncServerClient]:
@@ -43,10 +52,15 @@ class AsyncServer(object):
     def __del__(self):
         self.clients = []
 
-    def add_client(self, websocket):
-        client = self.client_type(websocket, self)
-        self.clients.append(client)
-        return client.listen()
+    def add_client(self, websocket: server.WebSocketServerProtocol):
+        #  host validate
+        host = websocket.remote_address[0]
+        if host in self.allow_hosts:
+            client = self.client_type(websocket, self)
+            self.clients.append(client)
+            return client.listen()
+        else:
+            websocket.close()
 
     async def _listen(self):
         self.is_alive = True
